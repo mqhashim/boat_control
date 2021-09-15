@@ -26,7 +26,8 @@ class ControlBoat():
         print('MoveBoat namespace:',self.ns)
 
          # get the robots ip and port
-        self.boat_ip = rospy.get_param('~boat_ip','192.168.1.42')
+         # TODO: setup UDP hole punching (POW!!!)
+        self.boat_ip = rospy.get_param('~boat_ip','192.168.47.115')
         self.boat_port = rospy.get_param('~boat_port',11411)
 
         # get port for communcation with boat/phone
