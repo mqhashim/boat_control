@@ -8,6 +8,7 @@ from geographic_msgs.msg import GeoPose
 import folium
 
 import webbrowser
+from selenium import webdriver
 import os
 
 class Map:
@@ -17,13 +18,16 @@ class Map:
         rospy.init_node('map',anonymous = False)
         self.ns = rospy.get_namespace()
 
+        rospy.on_shutdown(self.shutdown)
+
+
         # Set up rate
         # update map every 2 seconds by default
-        rate = rospy.get_param('~rate',0.5)
+        rate = rospy.get_param('~rate',1/5)
         self.rate = rospy.Rate(rate)
 
         # subscribe to position
-        self.geo_pub = rospy.Subscriber(self.ns+'geo_pose',GeoPose,self.geo_pose_callback)
+        self.geo_sub = rospy.Subscriber(self.ns+'geo_pose',GeoPose,self.geo_pose_callback)
 
         # get map file location
         self.map_location = '/tmp/'+self.ns+'map.html'
@@ -31,6 +35,7 @@ class Map:
         # set up map object
         self.map = None
         self.map_launched = False
+        self.browser = None
 
         # set up locations
         self.locations = []
@@ -41,10 +46,16 @@ class Map:
                 self.map.save(self.map_location)
                 if not self.map_launched:
                     self.map_launched =True
-                    webbrowser.open('file://'+os.path.realpath(self.map_location))
+                    self.browser = webdriver.Firefox()
+                    self.browser.get('file://'+os.path.realpath(self.map_location))
+                else:
+                    self.browser.refresh()
             self.rate.sleep()
 
-                    
+    def shutdown(self):
+        #placeholder
+        x = 5
+
 
 
     def geo_pose_callback(self,geo_pose):
@@ -59,7 +70,7 @@ class Map:
         else :
             last_point =self.locations[-1]
             dist = self.distance(point,last_point)
-            if (dist>0.00000000000001):
+            if (dist>0.00000001):
                 # new point is far enough
                 folium.Marker(point).add_to(self.map)
                 folium.PolyLine(locations=[point,last_point],line_opacity=0.5).add_to(self.map)
