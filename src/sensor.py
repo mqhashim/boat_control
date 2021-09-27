@@ -32,14 +32,6 @@ class Sensor:
 
     def loop(self):
         while not rospy.is_shutdown():
-            if self.map != None:
-                self.map.save(self.map_location)
-                if not self.map_launched:
-                    self.map_launched =True
-                    self.browser = webdriver.Firefox()
-                    self.browser.get('file://'+os.path.realpath(self.map_location))
-                else:
-                    self.browser.refresh()
             self.rate.sleep()
 
                     
@@ -65,5 +57,5 @@ class Sensor:
         return dist
 
 if __name__ == '__main__':
-    map = Map()
-    map.loop()
+    sensor = Sensor()
+    sensor.loop()

@@ -38,10 +38,24 @@ class Map:
         self.browser = None
 
         # set up locations
+        self.location = None
         self.locations = []
 
     def loop(self):
         while not rospy.is_shutdown():
+            if self.location != None:
+                if (self.map == None):
+                    # first location
+                    self.map = folium.Map(location = self.location,zoom_start=12)
+                    folium.Marker(self.location,popup='Start').add_to(self.map)
+                else :
+                    last_point =self.locations[-1]
+                    dist = self.distance(point,last_point)
+                    if (dist>0.00000001):
+                        # new point is far enough
+                        folium.Marker(point).add_to(self.map)
+                        folium.PolyLine(locations=[point,last_point],line_opacity=0.5).add_to(self.map)
+                self.locations.append(self.location) 
             if self.map != None:
                 self.map.save(self.map_location)
                 if not self.map_launched:
@@ -50,6 +64,7 @@ class Map:
                     self.browser.get('file://'+os.path.realpath(self.map_location))
                 else:
                     self.browser.refresh()
+            
             self.rate.sleep()
 
     def shutdown(self):
@@ -61,21 +76,10 @@ class Map:
     def geo_pose_callback(self,geo_pose):
         lat = geo_pose.position.latitude
         lng = geo_pose.position.longitude
-        point  = [lat,lng]
-        print(point)
-        if (self.map == None):
-            # first location
-            self.map = folium.Map(location = point,zoom_start=12)
-            folium.Marker(point,popup='Start').add_to(self.map)
-        else :
-            last_point =self.locations[-1]
-            dist = self.distance(point,last_point)
-            if (dist>0.00000001):
-                # new point is far enough
-                folium.Marker(point).add_to(self.map)
-                folium.PolyLine(locations=[point,last_point],line_opacity=0.5).add_to(self.map)
+        self.location  = [lat,lng]
+        
 
-        self.locations.append(point)       
+              
 
             
 
