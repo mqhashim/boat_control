@@ -4,6 +4,7 @@
 import rospy
 
 # importing messages
+from std_msgs.msg import String
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Pose
 from geographic_msgs.msg import GeoPose
@@ -27,7 +28,7 @@ class ControlBoat():
 
          # get the robots ip and port
          # TODO: setup UDP hole punching (POW!!!)
-        self.boat_ip = rospy.get_param('~boat_ip','192.168.47.115')
+        self.boat_ip = rospy.get_param('~boat_ip','192.168.86.115')
         self.boat_port = rospy.get_param('~boat_port',11411)
 
         # get port for communcation with boat/phone
@@ -42,10 +43,12 @@ class ControlBoat():
 
         # subscribe to vel_cmd
         self.vel_sub = rospy.Subscriber(self.ns+'cmd_vel',Twist,callback = self.vel_callback,queue_size=1)
+        self.waypoint_sub = rospy.Subscriber(self.ns+'waypoint',GeoPose,callback = self.waypoint_callback,queue_size=1)
 
         # setup pose and geoPose publishers
         self.geo_pub = rospy.Publisher(self.ns+'geo_pose',GeoPose,queue_size=1)
         self.pose_pub = rospy.Publisher(self.ns+'pose',Pose,queue_size=1)
+        self.sensor_pub = rospy.Publisher(self.ns+'sensor',String,queue_size=1)
 
         #initialize velocity
         self.velocity = Twist()
@@ -76,16 +79,22 @@ class ControlBoat():
 
     def vel_callback(self,msg):
         vel_data = self.twist_to_bytes(msg)
-        ticket_number = self.boat_server.get_ticket()
+        ticket_number = -1
         self.boat_server.send_command(ticket_number,server.Commands.CMD_SET_VELOCITY,vel_data,None)
         self.velocity = msg
+
+    def waypoint_callback(self,msg):
+        print(5) 
 
     def register_sensor(self):
         def callback(data):
             sensor_data = self.sensor_from_bytes(data)
             ack_ticket = self.int_from_bytes(data[-8:])
-            self.boat_server.ack_sensor_data(ack_ticket)
+            #self.boat_server.ack_sensor_data(ack_ticket)
             # TODO: Add sensor logging HERE
+            string = str(sensor_data['channel'])+','+str(sensor_data['type'])+','+str(sensor_data['val'])
+            string += ','+str(sensor_data['lat'])+','+str(sensor_data['lng'])
+            self.sensor_pub.publish(string)
             print(sensor_data)
 
         self.boat_server.register_listener(server.Commands.CMD_REGISTER_SENSOR_LISTENER,callback)

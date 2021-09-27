@@ -71,7 +71,8 @@ class Ticket:
     def handle_data(self,data):
         self.got_data = True
         self.last_reply = time.time()
-        self.callback(data)
+        if (self.callback != None):
+            self.callback(data)
         return self.got_ack
 
     def is_timeout(self):
@@ -101,7 +102,7 @@ class Listener:
         self.register_command = register_command
 
         self.last_reply = time.time()
-        self.timeout = 0.5
+        self.timeout = 3
         self.timeout_counter = 0
 
 
@@ -114,11 +115,6 @@ class Listener:
     
     def check_timeout(self):
         if (self.is_connected()) and (abs(time.time()-self.last_reply)>self.timeout):
-            if (self.timeout_counter >= 5):
-                self.unregister_all()
-                self.timeout_counter = 0
-                return
-            self.timeout_counter += 1
             self.last_reply = time.time()
             self.server.register_listener(self.register_command,None)
         return 
@@ -131,7 +127,8 @@ class Listener:
         self.timeout_counter = 0
         for i in range(len(self.callbacks)):
             callback = self.callbacks[i]
-            callback(data)
+            if callback != None:
+                callback(data)
         
     
 class UDPServer:
@@ -164,7 +161,7 @@ class UDPServer:
         self.velocity_listeners = Listener(self,Commands.CMD_REGISTER_VELOCITY_LISTENER)
         self.waypoint_listeners = Listener(self,Commands.CMD_REGISTER_WAYPOINT_LISTENER)
 
-        self.log = open('log.txt','wb')
+        self.log = open('log.txt','w')
 
         # Create the socket
         self.sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
@@ -180,9 +177,9 @@ class UDPServer:
     
     def send_packet(self,packet):
         if not self.log.closed:
-            self.log.write(b'Sent: ')
-            self.log.write(packet)
-            self.log.write(b'\n')
+            self.log.write('Sent: ')
+            self.log.write(str(packet))
+            self.log.write('\n')
         self.sock.sendto(packet,(self.dest_ip,self.dest_port))
 
     def send_ack(self,ticket_number):
@@ -328,9 +325,9 @@ class UDPServer:
         if (packet == ''):
             return
         if not self.log.closed :
-            self.log.write(b'Recieved: ')
-            self.log.write(packet)
-            self.log.write(b'\n')
+            self.log.write('Recieved: ')
+            self.log.write(str(packet))
+            self.log.write('\n')
 
         ticket_number , data_no_ticket = self.ticket_from_bytes(packet)
         command, data = self.command_from_bytes(data_no_ticket)
