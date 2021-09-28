@@ -40,6 +40,8 @@ class Commands:
     CMD_SEND_CRUMB = "_B"
     CMD_ACK_CRUMB = "AC"
 
+    CMD_CONNECT = 'CC'
+
 
 class Ticket:
     def __init__(self,ticket_id,command,packet,callback,server):
@@ -86,7 +88,7 @@ class Ticket:
                 return True
             self.last_reply = time.time()
             packet = self.packet
-            self.server.send_packet(packet)        
+            self.server.send_packet(packet,self.server.boat_addr)        
             return False
         else :
             return False
@@ -102,7 +104,7 @@ class Listener:
         self.register_command = register_command
 
         self.last_reply = time.time()
-        self.timeout = 3
+        self.timeout = 1
         self.timeout_counter = 0
 
 
@@ -131,6 +133,32 @@ class Listener:
                 callback(data)
         
     
+class AddressHandler:
+    def __init__(self,server,lookup_ip,lookup_port,boat_id):
+        self.server = server
+        self.lookup_ip = lookup_ip
+        self.lookup_port = lookup_port
+        self.boat_id = boat_id
+    
+        self.last_ping = time.time()
+    
+    def ping_server(self):
+        # create packet
+        if (abs(time.time()-self.last_ping)>2.5):
+            packet = b'S' + int.to_bytes(self.boat_id,1,'big',signed=False)
+            self.server.send_packet(packet,(self.lookup_ip,self.lookup_port))
+            self.last_ping = time.time()
+
+    def handle_connect_command(self,data):
+        if len(data) > 0:
+            ip = str(data[2:-4],'utf')
+            port = int.from_bytes(data[-4:],'big',signed=False)
+            return (ip,port)
+        return None
+
+
+
+
 class UDPServer:
 
     NO_TICKET = -1
@@ -145,7 +173,7 @@ class UDPServer:
         Commands.CMD_SEND_WAYPOINT  
     ]
 
-    def __init__(self,server_port,dest_ip,dest_port):
+    def __init__(self,server_port,lookup_ip,lookup_port,boat_id):
         # ticket dictionary
         # key : int/ticket number
         # value : Ticket object
@@ -171,32 +199,39 @@ class UDPServer:
         self.sock.settimeout(0.1)
 
         # Set up destination ip and port
-        self.dest_ip = dest_ip
-        self.dest_port = dest_port
+        self.lookup_ip = lookup_ip
+        self.lookup_port = lookup_port
+        self.boat_id = boat_id
+
+        self.address_lookup = AddressHandler(self,lookup_ip,lookup_port,boat_id)
+
+        # initialize boat ip/port to none
+        self.boat_addr = None
 
     
-    def send_packet(self,packet):
-        if not self.log.closed:
-            self.log.write('Sent: ')
-            self.log.write(str(packet))
-            self.log.write('\n')
-        self.sock.sendto(packet,(self.dest_ip,self.dest_port))
+    def send_packet(self,packet,addr):
+        if (addr != None):
+            if not self.log.closed:
+                self.log.write('Sent: ')
+                self.log.write(str(packet))
+                self.log.write('\n')
+            self.sock.sendto(packet,addr)
 
     def send_ack(self,ticket_number):
-        self.ack_listener(Commands.CMD_ACKNOWLEDGE)
+        self.ack_listener(Commands.CMD_ACKNOWLEDGE,ticket_number)
 
-    def ack_listener(self,command):
-        ticket_bytes = self.ticket_to_bytes(-1)
+    def ack_listener(self,command,ticket=-1):
+        ticket_bytes = self.ticket_to_bytes(ticket)
         command_bytes = self.command_to_bytes(command)
         packet = ticket_bytes + command_bytes
-        self.send_packet(packet)
+        self.send_packet(packet,self.boat_addr)
     
-    def ack_sensor_data(self,sensor_ack_code):
-        ticket_bytes = self.ticket_to_bytes(-1)
-        sensor_ack_bytes = self.ticket_to_bytes(sensor_ack_code)
-        command_bytes = self.command_to_bytes(Commands.CMD_ACK_SENSORDATA)
-        packet = ticket_bytes + command_bytes + sensor_ack_bytes
-        self.send_packet(packet)
+    # def ack_sensor_data(self,sensor_ack_code):
+    #     ticket_bytes = self.ticket_to_bytes(-1)
+    #     sensor_ack_bytes = self.ticket_to_bytes(sensor_ack_code)
+    #     command_bytes = self.command_to_bytes(Commands.CMD_ACK_SENSORDATA)
+    #     packet = ticket_bytes + command_bytes + sensor_ack_bytes
+    #     self.send_packet(packet)
     
     # Used for sending commands (not registering listeners)
     def send_command(self,ticket_number,command,data,callback):
@@ -207,7 +242,7 @@ class UDPServer:
             # expecting a reply
             ticket = Ticket(ticket_number,command,packet,callback,self)
             self.tickets[ticket_number] = ticket
-        self.send_packet(packet)
+        self.send_packet(packet,self.boat_addr)
 
     # Used for registering listeners
     def register_listener(self,command,callback):
@@ -247,7 +282,7 @@ class UDPServer:
         ticket = Ticket(ticket_number,command,packet,None,self)
         self.tickets[ticket_number] = ticket
         
-        self.send_packet(packet)
+        self.send_packet(packet,self.boat_addr)
 
     
     def ticket_to_bytes(self,t):
@@ -317,6 +352,11 @@ class UDPServer:
         return 
 
     def get_packet(self):
+
+        self.address_lookup.ping_server()
+        # send random acc to boat server, enables hole punching
+        self.send_ack(300)
+
         try : 
             packet , addr = self.sock.recvfrom(512)
         except :
@@ -331,6 +371,12 @@ class UDPServer:
 
         ticket_number , data_no_ticket = self.ticket_from_bytes(packet)
         command, data = self.command_from_bytes(data_no_ticket)
+
+        if (command == Commands.CMD_CONNECT):
+            temp_addr = self.address_lookup.handle_connect_command(data)
+            if temp_addr != None:
+                self.boat_addr = temp_addr
+
 
         if (ticket_number != -1):
             # ticket, either an ack or data

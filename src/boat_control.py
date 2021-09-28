@@ -28,14 +28,15 @@ class ControlBoat():
 
          # get the robots ip and port
          # TODO: setup UDP hole punching (POW!!!)
-        self.boat_ip = rospy.get_param('~boat_ip','192.168.86.115')
-        self.boat_port = rospy.get_param('~boat_port',11411)
+        self.lookup_ip = rospy.get_param('~lookup_ip','3.12.146.3')
+        self.lookup_port = rospy.get_param('~lookup_port',32145)
+        self.boat_id = rospy.get_param('~boat_id',1)
 
         # get port for communcation with boat/phone
         self.port = rospy.get_param('~port',12345)
 
         # Set up server for communication with boat
-        self.boat_server = server.UDPServer(self.port,self.boat_ip,self.boat_port)
+        self.boat_server = server.UDPServer(self.port,self.lookup_ip,self.lookup_port,self.boat_id)
 
         # which function to call when ctrl+c is pressed
         # in this case we want to stop the boat before closing
