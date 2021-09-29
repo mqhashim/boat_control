@@ -5,6 +5,7 @@ import rospy
 
 # importing messages
 from std_msgs.msg import String
+from std_msgs.msg import Int8
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Pose
 from geographic_msgs.msg import GeoPose
@@ -44,7 +45,10 @@ class ControlBoat():
 
         # subscribe to vel_cmd
         self.vel_sub = rospy.Subscriber(self.ns+'cmd_vel',Twist,callback = self.vel_callback,queue_size=1)
-        self.waypoint_sub = rospy.Subscriber(self.ns+'waypoint',GeoPose,callback = self.waypoint_callback,queue_size=1)
+        
+        # setup waypoint subscribers and publishers
+        self.waypoint_sub = rospy.Subscriber(self.ns+'waypoint',String,callback = self.waypoint_callback)
+        self.waypoint_state_pub = rospy.Publisher(self.ns+'waypoint_state',Int8,queue_size=1)
 
         # setup pose and geoPose publishers
         self.geo_pub = rospy.Publisher(self.ns+'geo_pose',GeoPose,queue_size=1)
@@ -54,6 +58,8 @@ class ControlBoat():
         #initialize velocity
         self.velocity = Twist()
 
+        self.IS_AUTONOMOUS = 1
+
         self.velocity.linear.x = 0.0
         self.velocity.linear.y = 0.0
         self.velocity.linear.z = 0.0
@@ -61,8 +67,11 @@ class ControlBoat():
         self.velocity.angular.y = 0.0
         self.velocity.angular.z = 0.0
 
+        self.velocity_changed = False
+
         self.register_pose_listener()
         self.register_sensor()
+        self.register_waypoint_listener()
 
         # set up the velocity publish rate in Hz
         rate = rospy.get_param('~rate',50)
@@ -73,29 +82,67 @@ class ControlBoat():
     def control_boat(self):
         while not rospy.is_shutdown():
             # create packet
+            self.set_autonomy()
+            self.send_velocity()
             self.boat_server.get_packet()
             self.boat_server.handle_timeouts()
+
             # sleep
-            # self.rate.sleep()
+            self.rate.sleep()
+
+    def set_autonomy(self):
+        ticket_number = -1
+        payload = int.to_bytes(self.IS_AUTONOMOUS,1,'big',signed=False)
+        self.boat_server.send_command(ticket_number,server.Commands.CMD_SET_AUTONOMOUS,payload,None)
+
+    def velocity_is_zero(self):
+        return (self.velocity.linear.x == 0.0 and
+        self.velocity.linear.y == 0.0 and
+        self.velocity.linear.z == 0.0 and
+        self.velocity.angular.x == 0.0 and
+        self.velocity.angular.y == 0.0 and
+        self.velocity.angular.z == 0.0)
+
 
     def vel_callback(self,msg):
-        vel_data = self.twist_to_bytes(msg)
-        ticket_number = -1
-        self.boat_server.send_command(ticket_number,server.Commands.CMD_SET_VELOCITY,vel_data,None)
+        self.velocity_changed = True
         self.velocity = msg
 
+    def send_velocity(self):
+        if (self.velocity_changed):
+            if (self.velocity_is_zero()):
+                # switch to autonomous
+                self.IS_AUTONOMOUS = 1
+            else :
+                self.IS_AUTONOMOUS = 0
+            vel_data = self.twist_to_bytes(self.velocity)
+            ticket_number = -1
+            self.boat_server.send_command(ticket_number,server.Commands.CMD_SET_VELOCITY,vel_data,None)
+            self.velocity_changed = False
+
     def waypoint_callback(self,msg):
-        print(5) 
+        # SEND START WAYPOINT COMMAND
+        # data should have the form lat,lng
+        data = msg.data
+        lat,lng = data.split(',')
+        lat = float(lat)
+        lng = float(lng)
+        waypoints = [(lat,lng)]
+        payload = self.waypoints_to_bytes(waypoints)
+
+        ticket_number = self.boat_server.get_ticket()
+
+        self.boat_server.send_command(ticket_number,server.Commands.CMD_START_WAYPOINTS,payload,None)
+        
 
     def register_sensor(self):
         def callback(data):
             sensor_data = self.sensor_from_bytes(data)
-            ack_ticket = self.int_from_bytes(data[-8:])
-            #self.boat_server.ack_sensor_data(ack_ticket)
-            # TODO: Add sensor logging HERE
             string = str(sensor_data['channel'])+','+str(sensor_data['type'])+','+str(sensor_data['val'])
             string += ','+str(sensor_data['lat'])+','+str(sensor_data['lng'])
-            self.sensor_pub.publish(string)
+            msg = String()
+            msg.data = string
+            self.sensor_pub.publish(msg)
             print(sensor_data)
 
         self.boat_server.register_listener(server.Commands.CMD_REGISTER_SENSOR_LISTENER,callback)
@@ -106,6 +153,17 @@ class ControlBoat():
             self.geo_pub.publish(geo_pose)
             self.pose_pub.publish(pose)
         self.boat_server.register_listener(server.Commands.CMD_REGISTER_POSE_LISTENER,callback)
+    
+    def register_waypoint_listener(self):
+        def callback(data):
+            # should get 1 byte corresponding to waypoint state, just forward it
+            if (len(data) == 0):
+                return
+            state = data[0]
+            msg = Int8()
+            msg.data = state
+            self.waypoint_state_pub.publish(msg)
+        self.boat_server.register_listener(server.Commands.CMD_REGISTER_WAYPOINT_LISTENER,callback)
 
     def get_pose(self,callback):
         ticket_number = self.boat_server.get_ticket()

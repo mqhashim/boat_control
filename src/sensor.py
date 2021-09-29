@@ -37,9 +37,10 @@ class Sensor:
                     
 
 
-    def sensor_callback(self,data):
+    def sensor_callback(self,msg):
         #data should look like:
         #channel,type,value,lat,lng
+        data = msg.data
         timestamp = time.time()
         line = str(timestamp) + ',' + data+'\n'
         self.data_file.write(line)

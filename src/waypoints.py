@@ -4,23 +4,25 @@
 import rospy
 
 # importing messages
-from geographic_msgs.msg import GeoPose
-
-#!/usr/bin/python3
-
-# importing rospy 
-import rospy
-
-# importing messages
 from std_msgs.msg import String
+from std_msgs.msg import Int8
 
 import time
 
-class Sensor:
+class WaypointHandler:
+
+    GOING = 0
+    PAUSED = 1
+    DONE = 2
+    CANCELLED = 3
+    OFF = 4
+    UNKNOWN = 5
+
+
     def __init__(self):
 
         # Init ros node
-        rospy.init_node('sensor',anonymous = False)
+        rospy.init_node('waypoint_handler',anonymous = False)
         self.ns = rospy.get_namespace()
 
         rospy.on_shutdown(self.shutdown)
@@ -29,35 +31,85 @@ class Sensor:
         rate = rospy.get_param('~rate',1)
         self.rate = rospy.Rate(rate)
 
+        # string for each waypoint
+        self.current_waypoints = []
+        self.current_waypoint_index = 0
+        self.send_next = False
+        self.last_waypoint_ended = 0
+        self.moving_to_waypoint = False
+
+        # publish to waypoint
+        self.waypoint_pub = rospy.Publisher(self.ns+'waypoint',String,queue_size=1)
         
-        # subscribe to sensor
-        self.sensor_sub = rospy.Subscriber(self.ns+'sensor',String,self.sensor_callback)
+        # subscribe to waypoint_list
+        self.waypoint_list_sub = rospy.Subscriber(self.ns+'waypoint_list',String,self.waypoint_list_callback)
         
-        # get map file location
-        self.sensor_file_location = '/tmp/'+self.ns+'sensor_data.csv'
-        self.data_file = open(self.sensor_file_location,'w')
-        self.data_file.write('timestamp,channel,type,value,lat,lng\n')
+        # subscribe to waypoint_state
+        self.waypoint_list_sub = rospy.Subscriber(self.ns+'waypoint_state',Int8,self.waypoint_state_callback)
+
+    def is_waypoint(self,s):
+        try:
+            lat,lng = s.split(',')
+            float(lat)
+            float(lng)
+            return True
+        except ValueError:
+            return False
+
+    def waypoint_list_callback(self,msg):
+        data = msg.data
+        waypoints = data.split('\n')
+        waypoints = list(filter(lambda x: self.is_waypoint(x),waypoints))
+        self.current_waypoints = waypoints
+        self.current_waypoint_index = 0
+        self.send_next = True
+        self.last_waypoint_ended = 0
+
+    def waypoint_state_callback(self,msg):
+        state = msg.data
+        if (state == self.GOING or state == self.PAUSED):
+            # do nothing
+            return
+        elif (state == self.DONE):
+            if (self.moving_to_waypoint):
+                # Done with current waypoint, move on to next
+
+                # TODO: add anything that needs to be done when a waypoint
+                # is reached here
+                print('DONE :D')
+
+                self.moving_to_waypoint = False
+                self.current_waypoint_index += 1
+                self.send_next = True
+                self.last_waypoint_ended = time.time()
+        else :
+            # cancel everything
+            self.current_waypoints = []
+            self.current_waypoint_index = 0
+            self.send_next = False
+            self.last_waypoint_ended = 0
+            self.moving_to_waypoint = False
+        
+        return
 
     def loop(self):
         while not rospy.is_shutdown():
+            if self.send_next and (abs(time.time() - self.last_waypoint_ended)>4.9) and (0<=self.current_waypoint_index<len(self.current_waypoints)):
+                # send next waypoint :D
+                self.send_next = False
+                self.moving_to_waypoint = True
+                msg = String()
+                msg.data = self.current_waypoints[self.current_waypoint_index]
+                self.waypoint_pub.publish(msg)
+    
             self.rate.sleep()
 
-                    
-
-
-    def sensor_callback(self,data):
-        #data should look like:
-        #channel,type,value,lat,lng
-        timestamp = time.time()
-        line = str(timestamp) + ',' + data+'\n'
-        self.data_file.write(line)
-    
     def shutdown(self):
-        self.data_file.close()
+        return 5
 
 
         
 
 if __name__ == '__main__':
-    sensor = Sensor()
-    sensor.loop()
+    waypoint_handler = WaypointHandler()
+    waypoint_handler.loop()

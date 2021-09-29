@@ -42,6 +42,8 @@ class Commands:
 
     CMD_CONNECT = 'CC'
 
+    CMD_SET_AUTONOMOUS = "SA"
+
 
 class Ticket:
     def __init__(self,ticket_id,command,packet,callback,server):
@@ -376,6 +378,7 @@ class UDPServer:
             temp_addr = self.address_lookup.handle_connect_command(data)
             if temp_addr != None:
                 self.boat_addr = temp_addr
+            return
 
 
         if (ticket_number != -1):
@@ -392,7 +395,7 @@ class UDPServer:
                     self.tickets.pop(ticket_number)
         else :
             # no ticket
-            # probably sensor
+            # probably sending stuff to a listener
             if command in self.listener_commands :
                 self.handle_listeners(command,data)
 
