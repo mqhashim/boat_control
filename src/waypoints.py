@@ -105,7 +105,9 @@ class WaypointHandler:
             self.rate.sleep()
 
     def shutdown(self):
-        return 5
+        self.waypoint_pub.publish('')
+        rospy.sleep(1)
+        return
 
 
         

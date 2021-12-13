@@ -101,12 +101,12 @@ class ControlBoat():
 
     def velocity_is_zero(self):
         threshold = 0.0005
-        return (self.velocity.linear.x <= threshold and
-        self.velocity.linear.y <= threshold and
-        self.velocity.linear.z <= threshold and
-        self.velocity.angular.x <= threshold and
-        self.velocity.angular.y <= threshold and
-        self.velocity.angular.z <= threshold)
+        return (abs(self.velocity.linear.x) <= threshold and
+        abs(self.velocity.linear.y) <= threshold and
+        abs(self.velocity.linear.z) <= threshold and
+        abs(self.velocity.angular.x) <= threshold and
+        abs(self.velocity.angular.y) <= threshold and
+        abs(self.velocity.angular.z) <= threshold)
 
 
     def vel_callback(self,msg):
@@ -132,6 +132,10 @@ class ControlBoat():
         # SEND START WAYPOINT COMMAND
         # data should have the form lat,lng
         data = msg.data
+        if (data == ''):
+            # stop waypoints
+            self.boat_server.send_command(-1,server.Commands.CMD_STOP_WAYPOINTS,b'',None)
+            return
         lat,lng = data.split(',')
         lat = float(lat)
         lng = float(lng)
