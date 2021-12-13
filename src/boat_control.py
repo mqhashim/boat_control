@@ -57,8 +57,9 @@ class ControlBoat():
 
         #initialize velocity
         self.velocity = Twist()
-
+        self.LAST_AUTONOMOUS = 0
         self.IS_AUTONOMOUS = 1
+        
 
         self.velocity.linear.x = 0.0
         self.velocity.linear.y = 0.0
@@ -91,6 +92,9 @@ class ControlBoat():
             self.rate.sleep()
 
     def set_autonomy(self):
+        if (self.IS_AUTONOMOUS == self.LAST_AUTONOMOUS):
+            # no change, return
+            return
         ticket_number = -1
         payload = int.to_bytes(self.IS_AUTONOMOUS,1,'big',signed=False)
         self.boat_server.send_command(ticket_number,server.Commands.CMD_SET_AUTONOMOUS,payload,None)
@@ -113,9 +117,11 @@ class ControlBoat():
         if (self.velocity_changed):
             if (self.velocity_is_zero()):
                 # switch to autonomous
+                self.LAST_AUTONOMOUS = self.IS_AUTONOMOUS
                 self.IS_AUTONOMOUS = 1
                 return
             else :
+                self.LAST_AUTONOMOUS = self.IS_AUTONOMOUS
                 self.IS_AUTONOMOUS = 0
             vel_data = self.twist_to_bytes(self.velocity)
             ticket_number = -1
