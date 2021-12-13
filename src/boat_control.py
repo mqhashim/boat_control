@@ -96,12 +96,13 @@ class ControlBoat():
         self.boat_server.send_command(ticket_number,server.Commands.CMD_SET_AUTONOMOUS,payload,None)
 
     def velocity_is_zero(self):
-        return (self.velocity.linear.x == 0.0 and
-        self.velocity.linear.y == 0.0 and
-        self.velocity.linear.z == 0.0 and
-        self.velocity.angular.x == 0.0 and
-        self.velocity.angular.y == 0.0 and
-        self.velocity.angular.z == 0.0)
+        threshold = 0.0005
+        return (self.velocity.linear.x <= threshold and
+        self.velocity.linear.y <= threshold and
+        self.velocity.linear.z <= threshold and
+        self.velocity.angular.x <= threshold and
+        self.velocity.angular.y <= threshold and
+        self.velocity.angular.z <= threshold)
 
 
     def vel_callback(self,msg):
@@ -113,6 +114,7 @@ class ControlBoat():
             if (self.velocity_is_zero()):
                 # switch to autonomous
                 self.IS_AUTONOMOUS = 1
+                return
             else :
                 self.IS_AUTONOMOUS = 0
             vel_data = self.twist_to_bytes(self.velocity)
