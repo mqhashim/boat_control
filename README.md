@@ -14,7 +14,8 @@ pip3 install numpy
 pip3 install pyproj (requires pip version >= 19.0)
 pip3 install selenium
 ```
-if you have any problems installing pyproj, try updating pip to the latest version
+if you have any problems installing pyproj, try updating pip to the latest version.
+
 you can check the pip version by running 
 ```
 pip3 -V
